@@ -1,12 +1,12 @@
 from django.db import models
-from django.conf import settings
+from authe.models import User
+from abstraction.base_models import BaseModel
 
-User = settings.AUTH_USER_MODEL
-
-class Book(models.Model):
+class Book(BaseModel):
     GENRES = [
         ("fiction", "Fiction"),
         ("science", "Science"),
+        ("historical", "Historical"),
         ("biography", "Biography"),
     ]
     title = models.CharField(max_length=255)
@@ -19,7 +19,7 @@ class Book(models.Model):
     def __str__(self):
         return self.title
 
-class Booking(models.Model):
+class Booking(BaseModel):
     book = models.ForeignKey(Book, on_delete=models.CASCADE)
     borrower = models.ForeignKey(User, on_delete=models.CASCADE)
     start_at = models.DateTimeField(auto_now_add=True)
@@ -28,12 +28,11 @@ class Booking(models.Model):
     def __str__(self):
         return f"{self.borrower} -> {self.book.title}"
 
-class Rating(models.Model):
+class Rating(BaseModel):
     book = models.ForeignKey(Book, on_delete=models.CASCADE, related_name="ratings")
     user = models.ForeignKey(User, on_delete=models.CASCADE)
     stars = models.IntegerField()
     comment = models.TextField(blank=True)
-    created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
         return f"{self.stars}⭐️ - {self.book.title} by {self.user}"
