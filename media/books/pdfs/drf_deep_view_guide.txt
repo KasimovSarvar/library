@@ -1,0 +1,250 @@
+
+0. Common Building Blocks
+────────────────────────────
+queryset            → base QuerySet (usually Model.objects.all())  
+serializer_class    → translates between Model instances ↔ JSON  
+lookup_field        → URL kwarg (default "pk"; change to "slug", etc.)  
+permission_classes  → list of permission classes (IsAuthenticated, …)  
+parser_classes      → how request bodies are parsed (JSONParser, MultiPartParser, …)  
+
+Useful hooks inside class‑based views / viewsets:  
+• perform_create(self, serializer)  – inject extra data (e.g., author=self.request.user)  
+• perform_update(self, serializer)  – same for update  
+• get_queryset(self)               – dynamic filtering per request  
+
+Swagger / OpenAPI (drf‑yasg):  
+• APIView & custom ViewSet actions → annotate with @swagger_auto_schema  
+• ModelViewSet routed via DefaultRouter → documented automatically  
+
+
+1. APIView
+───────────
+Purpose: **Maximum control**; you hand‑write each HTTP method -> get(), post(), etc.   
+When to use: non‑CRUD endpoints, complex business logic, streaming, custom verbs.
+
+Skeleton:
+```python
+from rest_framework.views import APIView
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.parsers import JSONParser
+from rest_framework.response import Response
+from .serializers import PostSerializer
+from .models import Post
+
+class PostAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+    parser_classes = [JSONParser]
+
+    def get(self, request, pk=None):
+        if pk:
+            post = Post.objects.filter(pk=pk).first()
+            serializer = PostSerializer(post)
+            return Response(serializer.data)
+        posts = Post.objects.all()
+        serializer = PostSerializer(posts, many=True)
+        return Response(serializer.data)
+
+    def post(self, request):
+        serializer = PostSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        serializer.save(author=request.user)
+        return Response(serializer.data, status=201)
+```
+
+URLconf:
+```python
+urlpatterns = [
+    path("posts/", PostAPIView.as_view()),
+    path("posts/<int:pk>/", PostAPIView.as_view()),
+]
+```
+
+Swagger: use @swagger_auto_schema if needed.
+
+Pros: Fine-grained control  
+Cons: Verbose, manual URLs
+
+
+2. GenericAPIView 
+───────────────────────────────   
+
+Combined classes:  
+- ListAPIView  
+- CreateAPIView  
+- ListCreateAPIView  
+- RetrieveUpdateDestroyAPIView  
+
+Example:
+```python
+class PostListCreate(ListAPIView, CreateAPIView):
+    queryset = Post.objects.all()
+    serializer_class = PostSerializer
+    lookup_field = "pk"
+
+    def get(self, request, *args, **kwargs):
+        return self.list(request, *args, **kwargs)
+
+    def post(self, request, *args, **kwargs):
+        return self.create(request, *args, **kwargs)
+```
+
+URLconf:
+```python
+path("posts/", PostListCreate.as_view(), name="post-list"),
+```
+
+Pros: Minimal code  
+Cons: Still need to map URLs manually
+
+3. ViewSet
+────────────
+Purpose: Group related actions (list, retrieve, create, etc.)
+
+Manual Mapping:
+```python
+from rest_framework.viewsets import ViewSet
+
+class PostViewSet(ViewSet):
+    def list(self, request): ...
+    def create(self, request): ...
+    def retrieve(self, request, pk=None): ...
+```
+
+URLs:
+```python
+path("posts/", PostViewSet.as_view({"get": "list", "post": "create"})),
+path("posts/<int:pk>/", PostViewSet.as_view({"get": "retrieve", "put": "update"})),
+```
+
+Pros: Custom method names  
+Cons: Manual URL mapping, no auto Swagger
+
+4. ModelViewSet
+──────────────────
+Purpose: Fastest full CRUD  
+Includes: list, create, retrieve, update, partial_update, destroy
+
+```python
+class PostViewSet(ModelViewSet):
+    queryset = Post.objects.all()
+    serializer_class = PostSerializer
+    permission_classes = [IsAuthenticatedOrReadOnly]
+
+    def perform_create(self, serializer):
+        serializer.save(author=self.request.user)
+```
+
+Router:
+```python
+router = DefaultRouter()
+router.register("posts", PostViewSet)
+
+urlpatterns - empty
+and one more urlpatterns +=router.urls
+#urlpatterns = [ path("", include(router.urls)) ]
+```
+
+Pros: Minimal setup, Swagger auto-doc  
+Cons: Harder to customize deeply
+
+
+Django REST Framework Deep View & Decorator Guide
+===================================================
+(5) Extended Quick Decision Table
+----------------------------------
+Use this table to choose the right type of DRF view based on your use case:
+| Scenario / Need                                        | Best View Type    | Reason |
+|--------------------------------------------------------|-------------------|------------------------------------------------------------------------|
+| You want full control over request/response handling   | APIView           | Manually define `get`, `post`, etc. for fine-grained control.          |
+| You want to write custom business logic for each verb  | APIView           | Helps implement logic-heavy or non-CRUD endpoints.                     |
+| You need just `GET`, `POST`, or `PUT` for a model      | GenericAPIView    | Use mixins like `ListModelMixin`, `CreateModelMixin`, etc.             |
+| You want to expose multiple endpoints under 1 view     | ViewSet           | Define your own function names and map manually.                       |
+| You want full CRUD support quickly                     | ModelViewSet      | Provides ready-made `list`, `create`, `retrieve`, etc. with routers.   |
+| You want automatic Swagger/OpenAPI documentation       | ModelViewSet      | Integrated with routers.                                               |
+| You want to attach permissions, parsers, or filtering  | Any of the above  | All support `permission_classes`, `parser_classes`, `get_queryset      |
+
+
+(6) Python Decorators in Class Context
+---------------------------------------
+
+@classmethod
+~~~~~~~~~~~~
+- Used when you want a method to operate on the class itself, not just on instances.
+- First argument is `cls` (not `self`).
+- You can call it like: `MyClass.class_method()`
+Example:
+```python
+class Dog:
+dogs_created = 0
+def __init__(self, name):
+self.name = name
+Dog.dogs_created += 1
+@classmethod
+def get_dog_count(cls):
+return cls.dogs_created
+print(Dog.get_dog_count()) # 1, 2, ...
+```
+Use Cases:
+Tracking class-level counters
+Creating alternative constructors
+
+
+@staticmethod
+~~~~~~~~~~~~~~
+- No `self`, no `cls`. Just a regular function that happens to be inside a class.
+- Useful for helper functions that dont need to access instance or class.
+Example:
+```python
+class Math:
+@staticmethod
+def add(a, b):
+return a + b
+print(Math.add(3, 4)) # 7
+```
+Use Cases:
+Utility functions
+Grouping logic inside class context
+
+
+@property
+~~~~~~~~
+- Allows you to access a method like an attribute.
+- Great for read-only calculated fields.
+Example:
+```python
+class Rectangle:
+def __init__(self, width, height):
+self.width = width
+self.height = height
+
+@property
+def area(self):
+return self.width * self.height
+r = Rectangle(5, 10)
+print(r.area) # 50 (no parentheses!)
+```
+Use Cases:
+Calculated attributes
+Read-only values based on current state
+
+
+(7) Writing Business Logic in DRF
+----------------------------------
+Business logic = the rules or processes behind your apps functionality.
+Options to place business logic:
+Inside `serializer.validate_*` for validation checks
+Inside `perform_create()` set `author=self.request.user`, etc.
+Inside `get_queryset()` filter by logged-in user
+Inside overridden methods (`update`, `destroy`) custom behaviors
+
+
+(8) Wipe Coding and GPT-Aided Code Gen
+-----------------------------------------
+Tip: You can use GPT to scaffold fast, then enhance manually.
+Example prompt:
+> Give me a DRF ModelViewSet for Product with router URLs and IsAuthenticated permission
+Then:
+- Customize `perform_create()`
+- Add `filter_backends`, `search_fields`, etc.
+- Add throttling, rate limiting, pagination as needed
+
