@@ -18,4 +18,10 @@ class BookingSerializer(serializers.ModelSerializer):
 class RatingSerializer(serializers.ModelSerializer):
     class Meta:
         model = Rating
+        read_only_fields = ('book', 'user')
         fields = ('id', 'book', 'user', 'stars', 'comment')
+
+        def validate_stars(self, value):
+            if not 1 <= value <= 5:
+                raise serializers.ValidationError("Stars must be between 1 and 5")
+            return value
