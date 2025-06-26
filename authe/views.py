@@ -7,6 +7,8 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from drf_yasg.utils import swagger_auto_schema
 from authe.serializers import LoginSerializer, RegisterSerializer
 from drf_yasg import openapi
+from rest_framework.decorators import permission_classes
+from rest_framework.permissions import AllowAny
 
 
 @swagger_auto_schema(
@@ -48,6 +50,7 @@ def register_view(request):
     tags=["Auth"]
 )
 @api_view(['POST'])
+@permission_classes([AllowAny])
 def login_view(request):
     serializer = LoginSerializer(data=request.data)
     serializer.is_valid(raise_exception=True)

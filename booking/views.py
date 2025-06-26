@@ -160,9 +160,6 @@ def rate_book_view(request, pk):
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def booking_view(request):
-    if request.user_role != 1:
-        return Response({"error": "Only students can book books"}, status=403)
-
     serializer = BookingSerializer(data=request.data)
     if serializer.is_valid():
         book = serializer.validated_data['book']
