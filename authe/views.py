@@ -26,6 +26,7 @@ from rest_framework.permissions import AllowAny
     tags=["Auth"]
 )
 @api_view(['POST'])
+@permission_classes([AllowAny])
 def register_view(request):
     serializer = RegisterSerializer(data=request.data)
     if serializer.is_valid():
