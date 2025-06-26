@@ -12,14 +12,6 @@ from rest_framework.permissions import AllowAny
 
 
 @swagger_auto_schema(
-    method="get",
-    tags=["Auth"]
-)
-@api_view(['GET'])
-def me_view(request):
-    return Response({"username": request.user.username, "user_id": request.user.id,  "role": request.user.role})
-
-@swagger_auto_schema(
     method='post',
     request_body=openapi.Schema(
         type=openapi.TYPE_OBJECT,
