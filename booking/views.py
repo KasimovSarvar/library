@@ -6,10 +6,10 @@ from drf_yasg import openapi
 from rest_framework.parsers import MultiPartParser, FormParser
 from drf_yasg.utils import swagger_auto_schema
 from .serializers import BookSerializer, BookingSerializer, RatingSerializer
-from booking.models import Booking, Book
+from booking.models import Booking, Book, Rating
 from django.db.models import Q
 from rest_framework.permissions import IsAuthenticated
-from .permissions import IsAdmin, IsStudent
+from .permissions import IsAdmin
 
 
 search_param = openapi.Parameter(
@@ -26,7 +26,7 @@ search_param = openapi.Parameter(
     tags=["Book"]
 )
 @api_view(['GET'])
-@permission_classes([IsAuthenticated, IsStudent])
+@permission_classes([IsAuthenticated])
 def book_list_view(request):
     search = request.GET.get('search')
     if search:
@@ -48,7 +48,7 @@ def book_list_view(request):
     tags=["Book"]
 )
 @api_view(['GET'])
-@permission_classes([IsAuthenticated, IsStudent])
+@permission_classes([IsAuthenticated])
 def book_detail_view(request, pk):
     book = Book.objects.filter(id=pk).first()
     if not book:
@@ -124,21 +124,26 @@ def delete_book_view(request, pk):
     tags=["Rating"]
 )
 @api_view(['POST'])
-@permission_classes([IsAuthenticated, IsStudent])
+@permission_classes([IsAuthenticated])
 def rate_book_view(request, pk):
     book = Book.objects.filter(id=pk).first()
     if not book:
         return Response({"error": "Book not found"}, status=status.HTTP_404_NOT_FOUND)
 
+    if not Booking.objects.filter(book=book, borrower=request.user).exists():
+        return Response({"error": "Not your book"}, status=status.HTTP_403_FORBIDDEN)
+
     if not Booking.objects.filter(book=book, borrower=request.user, end_at__isnull=False).exists():
         return Response({"error": "Return book before rating"}, status=status.HTTP_403_FORBIDDEN)
+
+    if Rating.objects.filter(book=book, user=request.user).exists():
+        return Response({"error": "You already rated this book"}, status=status.HTTP_400_BAD_REQUEST)
 
     serializer = RatingSerializer(data=request.data)
     if serializer.is_valid():
         serializer.save(user=request.user, book=book)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
 
 
 @swagger_auto_schema(
@@ -153,7 +158,7 @@ def rate_book_view(request, pk):
     tags=["Booking"]
 )
 @api_view(['POST'])
-@permission_classes([IsAuthenticated, IsStudent])
+@permission_classes([IsAuthenticated])
 def booking_view(request):
     if request.user_role != 1:
         return Response({"error": "Only students can book books"}, status=403)
@@ -195,7 +200,7 @@ def booking_view(request):
     tags=["Booking"]
 )
 @api_view(['POST'])
-@permission_classes([IsAuthenticated, IsStudent])
+@permission_classes([IsAuthenticated])
 def return_book_view(request, pk):
     active_booking = (
         Booking.objects.select_related('book')
@@ -220,13 +225,14 @@ def return_book_view(request, pk):
         status=status.HTTP_200_OK,
     )
 
+
 @swagger_auto_schema(
     method='get',
     responses={200: "User reading/finished books stats"},
     tags=["Profile"]
 )
 @api_view(['GET'])
-@permission_classes([IsAuthenticated, IsStudent])
+@permission_classes([IsAuthenticated])
 def profile_view(request):
     user = request.user
     read_books = Booking.objects.filter(borrower=user, end_at__isnull=True).select_related('book')

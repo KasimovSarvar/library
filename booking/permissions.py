@@ -1,9 +1,5 @@
-from rest_framework import permissions
+from rest_framework.permissions import BasePermission
 
-class IsAdmin(permissions.BasePermission):
+class IsAdmin(BasePermission):
     def has_permission(self, request, view):
-        return getattr(request, "user_role", None) == 0
-
-class IsStudent(permissions.BasePermission):
-    def has_permission(self, request, view):
-        return getattr(request, "user_role", None) == 1
+        return hasattr(request.user, 'role') and request.user.role == 0
